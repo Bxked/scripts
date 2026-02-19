@@ -115,10 +115,13 @@ counterLabel.TextSize = 12
 counterLabel.Font = Enum.Font.Gotham
 counterLabel.Parent = frame
 
+-- Resize frame to fit new button
+frame.Size = UDim2.new(0, 260, 0, 210)
+
 -- Toggle Button
 local toggleBtn = Instance.new("TextButton")
 toggleBtn.Size = UDim2.new(1, -30, 0, 34)
-toggleBtn.Position = UDim2.new(0, 15, 1, -44)
+toggleBtn.Position = UDim2.new(0, 15, 1, -84)
 toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 160, 80)
 toggleBtn.Text = "▶  START FARMING"
 toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -130,6 +133,22 @@ toggleBtn.Parent = frame
 local btnCorner = Instance.new("UICorner")
 btnCorner.CornerRadius = UDim.new(0, 8)
 btnCorner.Parent = toggleBtn
+
+-- Unload Button
+local unloadBtn = Instance.new("TextButton")
+unloadBtn.Size = UDim2.new(1, -30, 0, 28)
+unloadBtn.Position = UDim2.new(0, 15, 1, -44)
+unloadBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+unloadBtn.Text = "✕  UNLOAD SCRIPT"
+unloadBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+unloadBtn.TextSize = 12
+unloadBtn.Font = Enum.Font.GothamBold
+unloadBtn.BorderSizePixel = 0
+unloadBtn.Parent = frame
+
+local unloadCorner = Instance.new("UICorner")
+unloadCorner.CornerRadius = UDim.new(0, 8)
+unloadCorner.Parent = unloadBtn
 
 -- Hide hint
 local hintLabel = Instance.new("TextLabel")
@@ -184,9 +203,35 @@ toggleBtn.MouseButton1Click:Connect(function()
 end)
 
 -- ================================================
+-- UNLOAD
+-- ================================================
+local unloaded = false
+local renderConnection
+
+local function unload()
+	if unloaded then return end
+	unloaded = true
+
+	-- Stop farming
+	setFarming(false)
+
+	-- Disconnect raycast loop
+	if renderConnection then
+		renderConnection:Disconnect()
+	end
+
+	-- Destroy UI
+	screenGui:Destroy()
+
+	print("[OreFarmer] Script unloaded.")
+end
+
+unloadBtn.MouseButton1Click:Connect(unload)
+
+-- ================================================
 -- RAYCAST (updates every frame, shows what mouse hovers)
 -- ================================================
-RunService.RenderStepped:Connect(function()
+renderConnection = RunService.RenderStepped:Connect(function()
 	local unitRay = camera:ScreenPointToRay(mouse.X, mouse.Y)
 	local raycastParams = RaycastParams.new()
 	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
