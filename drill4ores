@@ -1,0 +1,211 @@
+-- LocalScript: Place inside StarterPlayerScripts or StarterGui
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local player = Players.LocalPlayer
+local mouse = player:GetMouse()
+local camera = workspace.CurrentCamera
+
+-- ================================================
+-- SETTINGS
+-- ================================================
+local TOGGLE_KEY = Enum.KeyCode.RightShift  -- Key to show/hide UI
+local RAY_LENGTH = 500
+
+-- ================================================
+-- STATE
+-- ================================================
+local farming = false
+local farmThread = nil
+
+-- ================================================
+-- UI CREATION
+-- ================================================
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "OreFarmerUI"
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.Parent = player.PlayerGui
+
+-- Main Frame
+local frame = Instance.new("Frame")
+frame.Name = "MainFrame"
+frame.Size = UDim2.new(0, 260, 0, 170)
+frame.Position = UDim2.new(0, 20, 0.5, -85)
+frame.BackgroundColor3 = Color3.fromRGB(10, 10, 15)
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true
+frame.Parent = screenGui
+
+-- Rounded corners
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 10)
+corner.Parent = frame
+
+-- Neon border stroke
+local stroke = Instance.new("UIStroke")
+stroke.Color = Color3.fromRGB(0, 200, 100)
+stroke.Thickness = 1.5
+stroke.Parent = frame
+
+-- Title Bar
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, 36)
+titleBar.BackgroundColor3 = Color3.fromRGB(0, 160, 80)
+titleBar.BorderSizePixel = 0
+titleBar.Parent = frame
+
+local titleCorner = Instance.new("UICorner")
+titleCorner.CornerRadius = UDim.new(0, 10)
+titleCorner.Parent = titleBar
+
+-- Fix bottom corners of titlebar
+local titleFix = Instance.new("Frame")
+titleFix.Size = UDim2.new(1, 0, 0.5, 0)
+titleFix.Position = UDim2.new(0, 0, 0.5, 0)
+titleFix.BackgroundColor3 = Color3.fromRGB(0, 160, 80)
+titleFix.BorderSizePixel = 0
+titleFix.Parent = titleBar
+
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size = UDim2.new(1, 0, 1, 0)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Text = "⛏  ORE FARMER"
+titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+titleLabel.TextSize = 15
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.Parent = titleBar
+
+-- Status Label
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(1, 0, 0, 28)
+statusLabel.Position = UDim2.new(0, 0, 0, 44)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Text = "Status: STOPPED"
+statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+statusLabel.TextSize = 13
+statusLabel.Font = Enum.Font.Gotham
+statusLabel.Parent = frame
+
+-- Raycast Result Label
+local rayLabel = Instance.new("TextLabel")
+rayLabel.Size = UDim2.new(1, -20, 0, 24)
+rayLabel.Position = UDim2.new(0, 10, 0, 75)
+rayLabel.BackgroundTransparency = 1
+rayLabel.Text = "Raycast: None"
+rayLabel.TextColor3 = Color3.fromRGB(100, 220, 255)
+rayLabel.TextSize = 12
+rayLabel.Font = Enum.Font.Gotham
+rayLabel.TextXAlignment = Enum.TextXAlignment.Left
+rayLabel.TextTruncate = Enum.TextTruncate.AtEnd
+rayLabel.Parent = frame
+
+-- Counter Label
+local counterLabel = Instance.new("TextLabel")
+counterLabel.Size = UDim2.new(1, 0, 0, 22)
+counterLabel.Position = UDim2.new(0, 0, 0, 102)
+counterLabel.BackgroundTransparency = 1
+counterLabel.Text = "Requests: 0"
+counterLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+counterLabel.TextSize = 12
+counterLabel.Font = Enum.Font.Gotham
+counterLabel.Parent = frame
+
+-- Toggle Button
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(1, -30, 0, 34)
+toggleBtn.Position = UDim2.new(0, 15, 1, -44)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 160, 80)
+toggleBtn.Text = "▶  START FARMING"
+toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleBtn.TextSize = 13
+toggleBtn.Font = Enum.Font.GothamBold
+toggleBtn.BorderSizePixel = 0
+toggleBtn.Parent = frame
+
+local btnCorner = Instance.new("UICorner")
+btnCorner.CornerRadius = UDim.new(0, 8)
+btnCorner.Parent = toggleBtn
+
+-- Hide hint
+local hintLabel = Instance.new("TextLabel")
+hintLabel.Size = UDim2.new(1, 0, 0, 18)
+hintLabel.Position = UDim2.new(0, 0, 1, 2)
+hintLabel.BackgroundTransparency = 1
+hintLabel.Text = "Press RightShift to hide UI"
+hintLabel.TextColor3 = Color3.fromRGB(100, 100, 100)
+hintLabel.TextSize = 10
+hintLabel.Font = Enum.Font.Gotham
+hintLabel.Parent = frame
+
+-- ================================================
+-- LOGIC
+-- ================================================
+local requestCount = 0
+
+local function setFarming(state)
+	farming = state
+	if farming then
+		statusLabel.Text = "Status: ● RUNNING"
+		statusLabel.TextColor3 = Color3.fromRGB(0, 220, 100)
+		toggleBtn.Text = "■  STOP FARMING"
+		toggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+		stroke.Color = Color3.fromRGB(0, 200, 100)
+
+		farmThread = task.spawn(function()
+			while farming do
+				task.wait()
+				pcall(function()
+					ReplicatedStorage.Packages.Knit.Services.OreService.RE.RequestRandomOre:FireServer()
+				end)
+				requestCount += 1
+				counterLabel.Text = "Requests: " .. requestCount
+			end
+		end)
+	else
+		statusLabel.Text = "Status: STOPPED"
+		statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+		toggleBtn.Text = "▶  START FARMING"
+		toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 160, 80)
+		stroke.Color = Color3.fromRGB(80, 80, 120)
+		if farmThread then
+			task.cancel(farmThread)
+			farmThread = nil
+		end
+	end
+end
+
+toggleBtn.MouseButton1Click:Connect(function()
+	setFarming(not farming)
+end)
+
+-- ================================================
+-- RAYCAST (updates every frame, shows what mouse hovers)
+-- ================================================
+RunService.RenderStepped:Connect(function()
+	local unitRay = camera:ScreenPointToRay(mouse.X, mouse.Y)
+	local raycastParams = RaycastParams.new()
+	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+	raycastParams.FilterDescendantsInstances = {player.Character or workspace}
+
+	local result = workspace:Raycast(unitRay.Origin, unitRay.Direction * RAY_LENGTH, raycastParams)
+	if result and result.Instance then
+		rayLabel.Text = "Raycast: " .. result.Instance.Name
+	else
+		rayLabel.Text = "Raycast: None"
+	end
+end)
+
+-- ================================================
+-- TOGGLE UI VISIBILITY
+-- ================================================
+UserInputService.InputBegan:Connect(function(input, processed)
+	if processed then return end
+	if input.KeyCode == TOGGLE_KEY then
+		frame.Visible = not frame.Visible
+	end
+end)
