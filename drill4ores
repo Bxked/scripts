@@ -12,7 +12,7 @@ local camera = workspace.CurrentCamera
 -- ================================================
 -- SETTINGS
 -- ================================================
-local TOGGLE_KEY = Enum.KeyCode.RightShift  -- Key to show/hide UI
+local TOGGLE_KEY = Enum.KeyCode.RightShift
 local RAY_LENGTH = 500
 
 -- ================================================
@@ -20,9 +20,52 @@ local RAY_LENGTH = 500
 -- ================================================
 local farming = false
 local farmThread = nil
+local drilling = false
+local drillThread = nil
+local oreCount = 0
+local drillCount = 0
 
 -- ================================================
--- UI CREATION
+-- HELPERS
+-- ================================================
+local function makeCorner(parent, radius)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, radius or 8)
+	c.Parent = parent
+	return c
+end
+
+local function makeLabel(parent, text, size, pos, color, font, xAlign)
+	local l = Instance.new("TextLabel")
+	l.Size = size
+	l.Position = pos
+	l.BackgroundTransparency = 1
+	l.Text = text
+	l.TextColor3 = color or Color3.fromRGB(200, 200, 200)
+	l.TextSize = 12
+	l.Font = font or Enum.Font.Gotham
+	l.TextXAlignment = xAlign or Enum.TextXAlignment.Center
+	l.Parent = parent
+	return l
+end
+
+local function makeButton(parent, text, pos, size, bg)
+	local b = Instance.new("TextButton")
+	b.Size = size or UDim2.new(1, -20, 0, 30)
+	b.Position = pos
+	b.BackgroundColor3 = bg or Color3.fromRGB(0, 160, 80)
+	b.Text = text
+	b.TextColor3 = Color3.fromRGB(255, 255, 255)
+	b.TextSize = 12
+	b.Font = Enum.Font.GothamBold
+	b.BorderSizePixel = 0
+	b.Parent = parent
+	makeCorner(b, 7)
+	return b
+end
+
+-- ================================================
+-- SCREEN GUI
 -- ================================================
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "OreFarmerUI"
@@ -33,146 +76,122 @@ screenGui.Parent = player.PlayerGui
 -- Main Frame
 local frame = Instance.new("Frame")
 frame.Name = "MainFrame"
-frame.Size = UDim2.new(0, 260, 0, 170)
-frame.Position = UDim2.new(0, 20, 0.5, -85)
+frame.Size = UDim2.new(0, 270, 0, 310)
+frame.Position = UDim2.new(0, 20, 0.5, -155)
 frame.BackgroundColor3 = Color3.fromRGB(10, 10, 15)
 frame.BorderSizePixel = 0
 frame.Active = true
 frame.Draggable = true
 frame.Parent = screenGui
+makeCorner(frame, 10)
 
--- Rounded corners
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 10)
-corner.Parent = frame
-
--- Neon border stroke
 local stroke = Instance.new("UIStroke")
-stroke.Color = Color3.fromRGB(0, 200, 100)
+stroke.Color = Color3.fromRGB(60, 60, 80)
 stroke.Thickness = 1.5
 stroke.Parent = frame
 
 -- Title Bar
 local titleBar = Instance.new("Frame")
 titleBar.Size = UDim2.new(1, 0, 0, 36)
-titleBar.BackgroundColor3 = Color3.fromRGB(0, 160, 80)
+titleBar.BackgroundColor3 = Color3.fromRGB(0, 150, 75)
 titleBar.BorderSizePixel = 0
 titleBar.Parent = frame
+makeCorner(titleBar, 10)
 
-local titleCorner = Instance.new("UICorner")
-titleCorner.CornerRadius = UDim.new(0, 10)
-titleCorner.Parent = titleBar
-
--- Fix bottom corners of titlebar
 local titleFix = Instance.new("Frame")
 titleFix.Size = UDim2.new(1, 0, 0.5, 0)
 titleFix.Position = UDim2.new(0, 0, 0.5, 0)
-titleFix.BackgroundColor3 = Color3.fromRGB(0, 160, 80)
+titleFix.BackgroundColor3 = Color3.fromRGB(0, 150, 75)
 titleFix.BorderSizePixel = 0
 titleFix.Parent = titleBar
 
-local titleLabel = Instance.new("TextLabel")
-titleLabel.Size = UDim2.new(1, 0, 1, 0)
-titleLabel.BackgroundTransparency = 1
-titleLabel.Text = "⛏  ORE FARMER"
-titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-titleLabel.TextSize = 15
-titleLabel.Font = Enum.Font.GothamBold
-titleLabel.Parent = titleBar
+makeLabel(titleBar, "⛏  ORE FARMER  |  DRILL COLLECTOR",
+	UDim2.new(1, 0, 1, 0), UDim2.new(0, 0, 0, 0),
+	Color3.fromRGB(255, 255, 255), Enum.Font.GothamBold)
 
--- Status Label
-local statusLabel = Instance.new("TextLabel")
-statusLabel.Size = UDim2.new(1, 0, 0, 28)
-statusLabel.Position = UDim2.new(0, 0, 0, 44)
-statusLabel.BackgroundTransparency = 1
-statusLabel.Text = "Status: STOPPED"
-statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-statusLabel.TextSize = 13
-statusLabel.Font = Enum.Font.Gotham
-statusLabel.Parent = frame
-
--- Raycast Result Label
-local rayLabel = Instance.new("TextLabel")
-rayLabel.Size = UDim2.new(1, -20, 0, 24)
-rayLabel.Position = UDim2.new(0, 10, 0, 75)
-rayLabel.BackgroundTransparency = 1
-rayLabel.Text = "Raycast: None"
-rayLabel.TextColor3 = Color3.fromRGB(100, 220, 255)
-rayLabel.TextSize = 12
-rayLabel.Font = Enum.Font.Gotham
-rayLabel.TextXAlignment = Enum.TextXAlignment.Left
+-- Raycast label
+local rayLabel = makeLabel(frame, "Raycast: None",
+	UDim2.new(1, -20, 0, 20), UDim2.new(0, 10, 0, 42),
+	Color3.fromRGB(100, 220, 255), Enum.Font.Gotham, Enum.TextXAlignment.Left)
 rayLabel.TextTruncate = Enum.TextTruncate.AtEnd
-rayLabel.Parent = frame
 
--- Counter Label
-local counterLabel = Instance.new("TextLabel")
-counterLabel.Size = UDim2.new(1, 0, 0, 22)
-counterLabel.Position = UDim2.new(0, 0, 0, 102)
-counterLabel.BackgroundTransparency = 1
-counterLabel.Text = "Requests: 0"
-counterLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
-counterLabel.TextSize = 12
-counterLabel.Font = Enum.Font.Gotham
-counterLabel.Parent = frame
+-- Divider 0
+local function makeDivider(yPos)
+	local d = Instance.new("Frame")
+	d.Size = UDim2.new(1, -20, 0, 1)
+	d.Position = UDim2.new(0, 10, 0, yPos)
+	d.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+	d.BorderSizePixel = 0
+	d.Parent = frame
+end
 
--- Resize frame to fit new button
-frame.Size = UDim2.new(0, 260, 0, 210)
-
--- Toggle Button
-local toggleBtn = Instance.new("TextButton")
-toggleBtn.Size = UDim2.new(1, -30, 0, 34)
-toggleBtn.Position = UDim2.new(0, 15, 1, -84)
-toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 160, 80)
-toggleBtn.Text = "▶  START FARMING"
-toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-toggleBtn.TextSize = 13
-toggleBtn.Font = Enum.Font.GothamBold
-toggleBtn.BorderSizePixel = 0
-toggleBtn.Parent = frame
-
-local btnCorner = Instance.new("UICorner")
-btnCorner.CornerRadius = UDim.new(0, 8)
-btnCorner.Parent = toggleBtn
-
--- Unload Button
-local unloadBtn = Instance.new("TextButton")
-unloadBtn.Size = UDim2.new(1, -30, 0, 28)
-unloadBtn.Position = UDim2.new(0, 15, 1, -44)
-unloadBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
-unloadBtn.Text = "✕  UNLOAD SCRIPT"
-unloadBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
-unloadBtn.TextSize = 12
-unloadBtn.Font = Enum.Font.GothamBold
-unloadBtn.BorderSizePixel = 0
-unloadBtn.Parent = frame
-
-local unloadCorner = Instance.new("UICorner")
-unloadCorner.CornerRadius = UDim.new(0, 8)
-unloadCorner.Parent = unloadBtn
-
--- Hide hint
-local hintLabel = Instance.new("TextLabel")
-hintLabel.Size = UDim2.new(1, 0, 0, 18)
-hintLabel.Position = UDim2.new(0, 0, 1, 2)
-hintLabel.BackgroundTransparency = 1
-hintLabel.Text = "Press RightShift to hide UI"
-hintLabel.TextColor3 = Color3.fromRGB(100, 100, 100)
-hintLabel.TextSize = 10
-hintLabel.Font = Enum.Font.Gotham
-hintLabel.Parent = frame
+makeDivider(68)
 
 -- ================================================
--- LOGIC
+-- SECTION 1: ORE FARMING
 -- ================================================
-local requestCount = 0
+makeLabel(frame, "ORE FARMING",
+	UDim2.new(1, -20, 0, 18), UDim2.new(0, 10, 0, 74),
+	Color3.fromRGB(0, 200, 100), Enum.Font.GothamBold, Enum.TextXAlignment.Left)
 
+local oreStatusLabel = makeLabel(frame, "Status: STOPPED",
+	UDim2.new(1, -20, 0, 18), UDim2.new(0, 10, 0, 94),
+	Color3.fromRGB(180, 180, 180), Enum.Font.Gotham, Enum.TextXAlignment.Left)
+
+local oreCountLabel = makeLabel(frame, "Requests: 0",
+	UDim2.new(1, -20, 0, 16), UDim2.new(0, 10, 0, 113),
+	Color3.fromRGB(110, 110, 110), Enum.Font.Gotham, Enum.TextXAlignment.Left)
+
+local oreBtn = makeButton(frame, "▶  START ORE FARMING",
+	UDim2.new(0, 10, 0, 133), UDim2.new(1, -20, 0, 30),
+	Color3.fromRGB(0, 160, 80))
+
+makeDivider(172)
+
+-- ================================================
+-- SECTION 2: DRILL COLLECTOR
+-- ================================================
+makeLabel(frame, "DRILL COLLECTOR  (ALL DRILLS)",
+	UDim2.new(1, -20, 0, 18), UDim2.new(0, 10, 0, 178),
+	Color3.fromRGB(100, 180, 255), Enum.Font.GothamBold, Enum.TextXAlignment.Left)
+
+local drillStatusLabel = makeLabel(frame, "Status: STOPPED",
+	UDim2.new(1, -20, 0, 18), UDim2.new(0, 10, 0, 198),
+	Color3.fromRGB(180, 180, 180), Enum.Font.Gotham, Enum.TextXAlignment.Left)
+
+local drillCountLabel = makeLabel(frame, "Collects: 0",
+	UDim2.new(1, -20, 0, 16), UDim2.new(0, 10, 0, 217),
+	Color3.fromRGB(110, 110, 110), Enum.Font.Gotham, Enum.TextXAlignment.Left)
+
+local drillBtn = makeButton(frame, "▶  START DRILL COLLECT",
+	UDim2.new(0, 10, 0, 237), UDim2.new(1, -20, 0, 30),
+	Color3.fromRGB(60, 120, 220))
+
+makeDivider(275)
+
+-- ================================================
+-- UNLOAD BUTTON
+-- ================================================
+local unloadBtn = makeButton(frame, "✕  UNLOAD SCRIPT",
+	UDim2.new(0, 10, 0, 280), UDim2.new(1, -20, 0, 22),
+	Color3.fromRGB(55, 55, 65))
+unloadBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
+unloadBtn.TextSize = 11
+
+makeLabel(frame, "RightShift = hide/show",
+	UDim2.new(1, 0, 0, 14), UDim2.new(0, 0, 1, 2),
+	Color3.fromRGB(65, 65, 75), Enum.Font.Gotham)
+
+-- ================================================
+-- ORE FARMING LOGIC
+-- ================================================
 local function setFarming(state)
 	farming = state
 	if farming then
-		statusLabel.Text = "Status: ● RUNNING"
-		statusLabel.TextColor3 = Color3.fromRGB(0, 220, 100)
-		toggleBtn.Text = "■  STOP FARMING"
-		toggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+		oreStatusLabel.Text = "Status: ● RUNNING"
+		oreStatusLabel.TextColor3 = Color3.fromRGB(0, 220, 100)
+		oreBtn.Text = "■  STOP ORE FARMING"
+		oreBtn.BackgroundColor3 = Color3.fromRGB(180, 45, 45)
 		stroke.Color = Color3.fromRGB(0, 200, 100)
 
 		farmThread = task.spawn(function()
@@ -181,26 +200,67 @@ local function setFarming(state)
 				pcall(function()
 					ReplicatedStorage.Packages.Knit.Services.OreService.RE.RequestRandomOre:FireServer()
 				end)
-				requestCount += 1
-				counterLabel.Text = "Requests: " .. requestCount
+				oreCount += 1
+				oreCountLabel.Text = "Requests: " .. oreCount
 			end
 		end)
 	else
-		statusLabel.Text = "Status: STOPPED"
-		statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-		toggleBtn.Text = "▶  START FARMING"
-		toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 160, 80)
-		stroke.Color = Color3.fromRGB(80, 80, 120)
-		if farmThread then
-			task.cancel(farmThread)
-			farmThread = nil
-		end
+		oreStatusLabel.Text = "Status: STOPPED"
+		oreStatusLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+		oreBtn.Text = "▶  START ORE FARMING"
+		oreBtn.BackgroundColor3 = Color3.fromRGB(0, 160, 80)
+		if not drilling then stroke.Color = Color3.fromRGB(60, 60, 80) end
+		if farmThread then task.cancel(farmThread) farmThread = nil end
 	end
 end
 
-toggleBtn.MouseButton1Click:Connect(function()
-	setFarming(not farming)
-end)
+oreBtn.MouseButton1Click:Connect(function() setFarming(not farming) end)
+
+-- ================================================
+-- DRILL COLLECT LOGIC
+-- ================================================
+local function setDrilling(state)
+	drilling = state
+	if drilling then
+		drillStatusLabel.Text = "Status: ● RUNNING"
+		drillStatusLabel.TextColor3 = Color3.fromRGB(100, 180, 255)
+		drillBtn.Text = "■  STOP DRILL COLLECT"
+		drillBtn.BackgroundColor3 = Color3.fromRGB(180, 45, 45)
+		stroke.Color = Color3.fromRGB(100, 180, 255)
+
+		drillThread = task.spawn(function()
+			while drilling do
+				local drillsFolder = workspace.Plots.Plot:FindFirstChild("Drills")
+				if drillsFolder then
+					local drills = drillsFolder:GetChildren()
+					drillStatusLabel.Text = "Status: ● RUNNING (" .. #drills .. " drills)"
+					for _, drill in ipairs(drills) do
+						if not drilling then break end
+						pcall(function()
+							ReplicatedStorage.Packages.Knit.Services.PlotService.RE.CollectDrill:FireServer(drill)
+						end)
+						drillCount += 1
+						drillCountLabel.Text = "Collects: " .. drillCount
+						task.wait()
+					end
+				else
+					drillStatusLabel.Text = "Status: ⚠ Drills folder not found"
+					task.wait(1)
+				end
+				task.wait()
+			end
+		end)
+	else
+		drillStatusLabel.Text = "Status: STOPPED"
+		drillStatusLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+		drillBtn.Text = "▶  START DRILL COLLECT"
+		drillBtn.BackgroundColor3 = Color3.fromRGB(60, 120, 220)
+		if not farming then stroke.Color = Color3.fromRGB(60, 60, 80) end
+		if drillThread then task.cancel(drillThread) drillThread = nil end
+	end
+end
+
+drillBtn.MouseButton1Click:Connect(function() setDrilling(not drilling) end)
 
 -- ================================================
 -- UNLOAD
@@ -211,25 +271,17 @@ local renderConnection
 local function unload()
 	if unloaded then return end
 	unloaded = true
-
-	-- Stop farming
 	setFarming(false)
-
-	-- Disconnect raycast loop
-	if renderConnection then
-		renderConnection:Disconnect()
-	end
-
-	-- Destroy UI
+	setDrilling(false)
+	if renderConnection then renderConnection:Disconnect() end
 	screenGui:Destroy()
-
 	print("[OreFarmer] Script unloaded.")
 end
 
 unloadBtn.MouseButton1Click:Connect(unload)
 
 -- ================================================
--- RAYCAST (updates every frame, shows what mouse hovers)
+-- RAYCAST
 -- ================================================
 renderConnection = RunService.RenderStepped:Connect(function()
 	local unitRay = camera:ScreenPointToRay(mouse.X, mouse.Y)
@@ -238,11 +290,7 @@ renderConnection = RunService.RenderStepped:Connect(function()
 	raycastParams.FilterDescendantsInstances = {player.Character or workspace}
 
 	local result = workspace:Raycast(unitRay.Origin, unitRay.Direction * RAY_LENGTH, raycastParams)
-	if result and result.Instance then
-		rayLabel.Text = "Raycast: " .. result.Instance.Name
-	else
-		rayLabel.Text = "Raycast: None"
-	end
+	rayLabel.Text = result and result.Instance and ("Raycast: " .. result.Instance.Name) or "Raycast: None"
 end)
 
 -- ================================================
