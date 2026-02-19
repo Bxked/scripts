@@ -230,24 +230,37 @@ local function setDrilling(state)
 
 		drillThread = task.spawn(function()
 			while drilling do
-				local drillsFolder = workspace.Plots.Plot:FindFirstChild("Drills")
+				-- Find the Drills folder: try all plots until we find one with Drills children
+				local drillsFolder = nil
+				local plotsFolder = workspace:FindFirstChild("Plots")
+				if plotsFolder then
+					for _, plot in ipairs(plotsFolder:GetChildren()) do
+						local df = plot:FindFirstChild("Drills")
+						if df and #df:GetChildren() > 0 then
+							drillsFolder = df
+							break
+						end
+					end
+				end
+
 				if drillsFolder then
 					local drills = drillsFolder:GetChildren()
 					drillStatusLabel.Text = "Status: ● RUNNING (" .. #drills .. " drills)"
 					for _, drill in ipairs(drills) do
 						if not drilling then break end
+						-- Fire with the drill instance directly
 						pcall(function()
 							ReplicatedStorage.Packages.Knit.Services.PlotService.RE.CollectDrill:FireServer(drill)
 						end)
 						drillCount += 1
 						drillCountLabel.Text = "Collects: " .. drillCount
-						task.wait()
+						task.wait(0.1)
 					end
 				else
-					drillStatusLabel.Text = "Status: ⚠ Drills folder not found"
-					task.wait(1)
+					drillStatusLabel.Text = "Status: ⚠ No drills found in any plot"
+					task.wait(2)
 				end
-				task.wait()
+				task.wait(0.5)
 			end
 		end)
 	else
