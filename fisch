@@ -1,0 +1,1092 @@
+if getgenv().cuppink then warn("CupPink Hub : Already executed!") return end
+getgenv().cuppink = true
+
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
+
+-- Load Rayfield UI Library
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+-- // // // Services // // // --
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualUser = game:GetService("VirtualUser")
+local HttpService = game:GetService("HttpService")
+local GuiService = game:GetService("GuiService")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local Players = game:GetService("Players")
+local ContextActionService = game:GetService('ContextActionService')
+local UserInputService = game:GetService('UserInputService')
+local CollectionService = game:GetService("CollectionService")
+
+-- // // // Locals // // // --
+local LocalPlayer = Players.LocalPlayer
+local LocalCharacter = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local HumanoidRootPart = LocalCharacter:WaitForChild("HumanoidRootPart")
+local UserPlayer = HumanoidRootPart:WaitForChild("user")
+local FishingZonesFolder = Workspace:WaitForChild("zones"):WaitForChild("fishing")
+local TpSpotsFolder = Workspace:WaitForChild("world"):WaitForChild("spawns"):WaitForChild("TpSpots")
+local NpcFolder = Workspace:WaitForChild("world"):WaitForChild("npcs")
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local RenderStepped = RunService.RenderStepped
+local WaitForSomeone = RenderStepped.Wait
+
+-- // Mobile Button // --
+local DeviceType = UserInputService.TouchEnabled and "Mobile" or "PC"
+if DeviceType == "Mobile" then
+    local ClickButton = Instance.new("ScreenGui")
+    local MainFrame = Instance.new("Frame")
+    local TextButton = Instance.new("TextButton")
+    local UICorner = Instance.new("UICorner")
+
+    ClickButton.Name = "ClickButton"
+    ClickButton.Parent = game.CoreGui
+    ClickButton.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+    MainFrame.Name = "MainFrame"
+    MainFrame.Parent = ClickButton
+    MainFrame.AnchorPoint = Vector2.new(1, 0)
+    MainFrame.BackgroundTransparency = 0.8
+    MainFrame.BackgroundColor3 = Color3.fromRGB(38, 38, 38)
+    MainFrame.BorderSizePixel = 0
+    MainFrame.Position = UDim2.new(1, -60, 0, 10)
+    MainFrame.Size = UDim2.new(0, 45, 0, 45)
+
+    UICorner.CornerRadius = UDim.new(1, 0)
+    UICorner.Parent = MainFrame
+
+    TextButton.Parent = MainFrame
+    TextButton.BackgroundColor3 = Color3.new(1, 1, 1)
+    TextButton.BackgroundTransparency = 1
+    TextButton.BorderSizePixel = 0
+    TextButton.Position = UDim2.new(0, 0, 0, 0)
+    TextButton.Size = UDim2.new(0, 45, 0, 45)
+    TextButton.AutoButtonColor = false
+    TextButton.Font = Enum.Font.SourceSans
+    TextButton.Text = "Open"
+    TextButton.TextColor3 = Color3.fromRGB(220, 125, 255)
+    TextButton.TextSize = 20
+
+    TextButton.MouseButton1Click:Connect(function()
+        game:GetService("VirtualInputManager"):SendKeyEvent(true, "RightShift", false, game)
+        game:GetService("VirtualInputManager"):SendKeyEvent(false, "RightShift", false, game)
+    end)
+end
+
+-- // // // Shadow Count Label // --
+local screenGui = Instance.new("ScreenGui", PlayerGui)
+screenGui.Name = "CupPinkOverlay"
+screenGui.ResetOnSpawn = false
+
+local shadowCountLabel = Instance.new("TextLabel", screenGui)
+shadowCountLabel.Size = UDim2.new(0, 200, 0, 50)
+shadowCountLabel.Position = UDim2.new(0, 30, 0, 260)
+shadowCountLabel.BackgroundTransparency = 0.5
+shadowCountLabel.BackgroundColor3 = Color3.fromRGB(38, 38, 38)
+shadowCountLabel.TextColor3 = Color3.fromRGB(220, 125, 255)
+shadowCountLabel.Font = Enum.Font.SourceSans
+shadowCountLabel.TextSize = 24
+shadowCountLabel.Text = "Shadow Count: 0"
+shadowCountLabel.Visible = false
+
+local corner = Instance.new("UICorner", shadowCountLabel)
+corner.CornerRadius = UDim.new(0, 10)
+
+local function updateShadowCount()
+    if workspace:FindFirstChild("Shadows") then
+        local count = #workspace.Shadows:GetChildren()
+        shadowCountLabel.Text = "Shadow Count: " .. count
+    end
+end
+
+spawn(function()
+    while true do
+        updateShadowCount()
+        task.wait(0.5)
+    end
+end)
+
+-- // // // Window // // // --
+local Window = Rayfield:CreateWindow({
+    Name = "CupPink Hub | Premium",
+    Icon = 0,
+    LoadingTitle = "CupPink Hub",
+    LoadingSubtitle = "discord.gg/25ms",
+    Theme = "Default",
+    DisableRayfieldPrompts = false,
+    DisableBuildWarnings = false,
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "CupPinkHub",
+        FileName = "Config"
+    },
+    KeySystem = false,
+})
+
+-- // // // Notify Function // // // --
+local function ShowNotification(String, Duration)
+    Rayfield:Notify({
+        Title = "CupPink Hub",
+        Content = String,
+        Duration = Duration or 5,
+        Image = 4483362458,
+    })
+end
+
+-- // // // Variables // // // --
+local CastMode = "Legit"
+local ShakeMode = "Navigation"
+local ReelMode = "Blatant"
+local WalkZone = "Ocean"
+local SelectedTotem = nil
+local SelectedWorldEvent = nil
+local ZoneCast = false
+local Zone = ""
+local AutoFreeze = false
+local Noclip = false
+local RodDupeDelay = 0.2
+local DupeEnabled = false
+local teleportSpots = {}
+
+-- // // // Collect TpSpots // // // --
+for _, v in pairs(TpSpotsFolder:GetChildren()) do
+    if table.find(teleportSpots, v.Name) == nil then
+        table.insert(teleportSpots, v.Name)
+    end
+end
+
+-- // // // AFK Bypass // // // --
+game.Players.LocalPlayer.Idled:Connect(function()
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
+end)
+
+spawn(function()
+    while true do
+        game:GetService("ReplicatedStorage"):WaitForChild("events"):WaitForChild("afk"):FireServer(false)
+        task.wait(0.01)
+    end
+end)
+
+-- // // // Get Position // // // --
+local function GetPosition()
+    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return {0, 0, 0} end
+    return { hrp.Position.X, hrp.Position.Y, hrp.Position.Z }
+end
+
+local function ExportValue(arg1, arg2)
+    return tonumber(string.format("%."..(arg2 or 1)..'f', arg1))
+end
+
+-- // // // Remember Position (for AutoFreeze) // // // --
+local function rememberPosition()
+    spawn(function()
+        local initialCFrame = HumanoidRootPart.CFrame
+
+        local bodyVelocity = Instance.new("BodyVelocity")
+        bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+        bodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        bodyVelocity.Parent = HumanoidRootPart
+
+        local bodyGyro = Instance.new("BodyGyro")
+        bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+        bodyGyro.D = 100
+        bodyGyro.P = 10000
+        bodyGyro.CFrame = initialCFrame
+        bodyGyro.Parent = HumanoidRootPart
+
+        while AutoFreeze do
+            HumanoidRootPart.CFrame = initialCFrame
+            task.wait(0.01)
+        end
+        bodyVelocity:Destroy()
+        bodyGyro:Destroy()
+    end)
+end
+
+-- // // // Sell Functions // // // --
+local function SellHand()
+    local currentPosition = HumanoidRootPart.CFrame
+    local sellPosition = CFrame.new(464, 151, 232)
+    local wasAutoFreezeActive = AutoFreeze
+    if wasAutoFreezeActive then AutoFreeze = false end
+    HumanoidRootPart.CFrame = sellPosition
+    task.wait(0.5)
+    workspace:WaitForChild("world"):WaitForChild("npcs"):WaitForChild("Marc Merchant"):WaitForChild("merchant"):WaitForChild("sell"):InvokeServer()
+    task.wait(1)
+    HumanoidRootPart.CFrame = currentPosition
+    if wasAutoFreezeActive then
+        AutoFreeze = true
+        rememberPosition()
+    end
+end
+
+local function SellAll()
+    local currentPosition = HumanoidRootPart.CFrame
+    local sellPosition = CFrame.new(464, 151, 232)
+    local wasAutoFreezeActive = AutoFreeze
+    if wasAutoFreezeActive then AutoFreeze = false end
+    HumanoidRootPart.CFrame = sellPosition
+    task.wait(0.5)
+    workspace:WaitForChild("world"):WaitForChild("npcs"):WaitForChild("Marc Merchant"):WaitForChild("merchant"):WaitForChild("sellall"):InvokeServer()
+    task.wait(1)
+    HumanoidRootPart.CFrame = currentPosition
+    if wasAutoFreezeActive then
+        AutoFreeze = true
+        rememberPosition()
+    end
+end
+
+-- // // // Auto Cast // // // --
+local autoCastEnabled = false
+
+local function doCast()
+    if not LocalCharacter then return end
+    local tool = LocalCharacter:FindFirstChildOfClass("Tool")
+    if not tool then return end
+    local hasBobber = tool:FindFirstChild("bobber")
+    if hasBobber then return end
+
+    if CastMode == "Legit" then
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, LocalPlayer, 0)
+        HumanoidRootPart.ChildAdded:Connect(function()
+            local power = HumanoidRootPart:FindFirstChild("power")
+            if power and power:FindFirstChild("powerbar") and power.powerbar:FindFirstChild("bar") then
+                power.powerbar.bar.Changed:Connect(function(property)
+                    if property == "Size" and power.powerbar.bar.Size == UDim2.new(1, 0, 1, 0) then
+                        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, LocalPlayer, 0)
+                    end
+                end)
+            end
+        end)
+    elseif CastMode == "Blatant" then
+        local rod = LocalCharacter:FindFirstChildOfClass("Tool")
+        if rod and rod:FindFirstChild("values") and string.find(rod.Name, "Rod") then
+            task.wait(0.5)
+            rod.events.cast:FireServer(math.random(90, 99))
+        end
+    end
+end
+
+-- // // // Auto Shake // // // --
+local autoShakeEnabled = false
+local autoShakeConnection
+
+local function autoShake()
+    if ShakeMode == "Navigation" then
+        xpcall(function()
+            local shakeui = PlayerGui:FindFirstChild("shakeui")
+            if not shakeui then return end
+            local safezone = shakeui:FindFirstChild("safezone")
+            local button = safezone and safezone:FindFirstChild("button")
+            task.wait(0.2)
+            GuiService.SelectedObject = button
+            if GuiService.SelectedObject == button then
+                VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+            end
+            task.wait(0.1)
+            GuiService.SelectedObject = nil
+        end, function() end)
+    elseif ShakeMode == "Mouse" then
+        xpcall(function()
+            local shakeui = PlayerGui:FindFirstChild("shakeui")
+            if not shakeui then return end
+            local safezone = shakeui:FindFirstChild("safezone")
+            local button = safezone and safezone:FindFirstChild("button")
+            if not button then return end
+            local pos = button.AbsolutePosition
+            local size = button.AbsoluteSize
+            VirtualInputManager:SendMouseButtonEvent(pos.X + size.X / 2, pos.Y + size.Y / 2, 0, true, LocalPlayer, 0)
+            VirtualInputManager:SendMouseButtonEvent(pos.X + size.X / 2, pos.Y + size.Y / 2, 0, false, LocalPlayer, 0)
+        end, function() end)
+    end
+end
+
+local function startAutoShake()
+    if autoShakeConnection or not autoShakeEnabled then return end
+    autoShakeConnection = RunService.RenderStepped:Connect(autoShake)
+end
+
+local function stopAutoShake()
+    if autoShakeConnection then
+        autoShakeConnection:Disconnect()
+        autoShakeConnection = nil
+    end
+end
+
+-- // // // Auto Reel // // // --
+local autoReelEnabled = false
+local autoReelConnection
+
+local function autoReel()
+    local reel = PlayerGui:FindFirstChild("reel")
+    if not reel then return end
+    local bar = reel:FindFirstChild("bar")
+    local playerbar = bar and bar:FindFirstChild("playerbar")
+    local fish = bar and bar:FindFirstChild("fish")
+    if playerbar and fish then
+        playerbar.Position = fish.Position
+    end
+end
+
+local function noperfect()
+    local reel = PlayerGui:FindFirstChild("reel")
+    if not reel then return end
+    local bar = reel:FindFirstChild("bar")
+    local playerbar = bar and bar:FindFirstChild("playerbar")
+    if playerbar then
+        playerbar.Position = UDim2.new(0, 0, -35, 0)
+        task.wait(0.2)
+    end
+end
+
+local function startAutoReel()
+    if ReelMode == "Legit" then
+        if autoReelConnection or not autoReelEnabled then return end
+        noperfect()
+        task.wait(2)
+        autoReelConnection = RunService.RenderStepped:Connect(autoReel)
+    elseif ReelMode == "Blatant" then
+        local reel = PlayerGui:FindFirstChild("reel")
+        if not reel then return end
+        local bar = reel:FindFirstChild("bar")
+        local playerbar = bar and bar:FindFirstChild("playerbar")
+        if not playerbar then return end
+        playerbar:GetPropertyChangedSignal('Position'):Wait()
+        game.ReplicatedStorage:WaitForChild("events"):WaitForChild("reelfinished"):FireServer(100, false)
+    end
+end
+
+local function stopAutoReel()
+    if autoReelConnection then
+        autoReelConnection:Disconnect()
+        autoReelConnection = nil
+    end
+end
+
+-- // // // PlayerGui Listeners // // // --
+PlayerGui.DescendantAdded:Connect(function(descendant)
+    if autoShakeEnabled and descendant.Name == "button" and descendant.Parent and descendant.Parent.Name == "safezone" then
+        startAutoShake()
+    end
+    if autoReelEnabled and descendant.Name == "playerbar" and descendant.Parent and descendant.Parent.Name == "bar" then
+        startAutoReel()
+    end
+    -- Dupe auto-accept
+    if DupeEnabled and descendant.Name == "confirm" and descendant.Parent and descendant.Parent.Name == "offer" then
+        local hud = LocalPlayer.PlayerGui:FindFirstChild("hud")
+        if hud then
+            local safezone = hud:FindFirstChild("safezone")
+            local bodyAnn = safezone and safezone:FindFirstChild("bodyannouncements")
+            local offerFrame = bodyAnn and bodyAnn:FindFirstChild("offer")
+            local confirm = offerFrame and offerFrame:FindFirstChild("confirm")
+            if confirm then
+                firesignal(confirm.MouseButton1Click)
+            end
+        end
+    end
+end)
+
+PlayerGui.DescendantAdded:Connect(function(descendant)
+    if descendant.Name == "playerbar" and descendant.Parent and descendant.Parent.Name == "bar" then
+        stopAutoShake()
+    end
+end)
+
+PlayerGui.DescendantRemoving:Connect(function(descendant)
+    if descendant.Name == "playerbar" and descendant.Parent and descendant.Parent.Name == "bar" then
+        stopAutoReel()
+        if autoCastEnabled then
+            task.wait(1)
+            doCast()
+        end
+    end
+end)
+
+-- // // // Zone Cast // // // --
+local ZoneConnection
+ZoneConnection = LocalCharacter.ChildAdded:Connect(function(child)
+    if ZoneCast and child:IsA("Tool") and FishingZonesFolder:FindFirstChild(Zone) then
+        child.ChildAdded:Connect(function(blehh)
+            if blehh.Name == "bobber" then
+                local RopeConstraint = blehh:FindFirstChildOfClass("RopeConstraint")
+                if ZoneCast and RopeConstraint then
+                    RopeConstraint.Changed:Connect(function(property)
+                        if property == "Length" then
+                            RopeConstraint.Length = math.huge
+                        end
+                    end)
+                    RopeConstraint.Length = math.huge
+                end
+                task.wait(1)
+                while WaitForSomeone(RenderStepped) do
+                    if ZoneCast and blehh.Parent then
+                        task.wait()
+                        blehh.CFrame = FishingZonesFolder[Zone].CFrame
+                    else
+                        break
+                    end
+                end
+            end
+        end)
+    end
+end)
+
+-- // // // Noclip // // // --
+RunService.Stepped:Connect(function()
+    if Noclip and LocalCharacter then
+        for _, v in pairs(LocalCharacter:GetDescendants()) do
+            if v:IsA("BasePart") and v.CanCollide then
+                v.CanCollide = false
+            end
+        end
+    end
+end)
+
+-- // // // Bypass GPS Loop // // // --
+local BypassGpsLoop = nil
+local DayOnlyLoop = nil
+
+-- // // // ============ TABS ============ // // // --
+
+-- ======= HOME TAB =======
+local HomeTab = Window:CreateTab("Home", 4483362458)
+
+HomeTab:CreateSection("Welcome")
+
+HomeTab:CreateButton({
+    Name = "Copy Discord Link",
+    Info = "Join our main discord server!",
+    Callback = function()
+        setclipboard("https://discord.gg/25ms")
+        ShowNotification("Discord link copied to clipboard!")
+    end,
+})
+
+HomeTab:CreateParagraph({
+    Title = "CupPink Hub - Premium",
+    Content = "Welcome to CupPink Hub! Use the tabs on the left to navigate features. Discord: discord.gg/25ms"
+})
+
+-- ======= EXCLUSIVES TAB =======
+local ExclusivesTab = Window:CreateTab("Exclusives", 4483362458)
+
+ExclusivesTab:CreateSection("Exclusive Features")
+
+ExclusivesTab:CreateToggle({
+    Name = "Show Shadow Count",
+    CurrentValue = false,
+    Flag = "CountShadows",
+    Callback = function(Value)
+        local RequireRod = PlayerGui.hud.safezone.equipment.rods.scroll.safezone:FindFirstChild("Rod Of The Depths")
+        if not RequireRod then
+            ShowNotification("Requirement: Rod Of The Depths")
+            return
+        end
+        shadowCountLabel.Visible = Value
+    end,
+})
+
+ExclusivesTab:CreateSlider({
+    Name = "Rod Spam Delay",
+    Range = {0, 1},
+    Increment = 0.1,
+    Suffix = "s",
+    CurrentValue = 0.2,
+    Flag = "RodDupeDelay",
+    Callback = function(Value)
+        RodDupeDelay = Value
+    end,
+})
+
+ExclusivesTab:CreateToggle({
+    Name = "Rod Of The Depths Spam",
+    CurrentValue = false,
+    Flag = "RodDupe",
+    Callback = function(Value)
+        local RequireRod = PlayerGui.hud.safezone.equipment.rods.scroll.safezone:FindFirstChild("Rod Of The Depths")
+        if not RequireRod then
+            ShowNotification("Requirement: Rod Of The Depths")
+            return
+        end
+        while Value and Rayfield.Flags["RodDupe"].CurrentValue do
+            ReplicatedStorage.events.equiprod:FireServer("Flimsy Rod")
+            ReplicatedStorage.events.equiprod:FireServer("Rod Of The Depths")
+            task.wait(RodDupeDelay)
+        end
+    end,
+})
+
+ExclusivesTab:CreateButton({
+    Name = "Dupe Shadow",
+    Info = "Requires Rod Of The Depths",
+    Callback = function()
+        local RequireRod = PlayerGui.hud.safezone.equipment.rods.scroll.safezone:FindFirstChild("Rod Of The Depths")
+        if not RequireRod then return ShowNotification("Requirement: Rod Of The Depths") end
+        for _, v in pairs(LocalPlayer.Backpack:GetChildren()) do
+            if v:FindFirstChild("offer") then
+                v.Parent = LocalPlayer.Character
+            end
+        end
+        task.wait(2)
+        for _, v in pairs(LocalPlayer.Character:GetChildren()) do
+            if v:FindFirstChild("offer") then
+                v.Parent = LocalPlayer.Backpack
+            end
+        end
+    end,
+})
+
+ExclusivesTab:CreateButton({
+    Name = "Destroy All Shadows",
+    Info = "Removes all shadows from workspace",
+    Callback = function()
+        if workspace:FindFirstChild("Shadows") then
+            for _, shadow in pairs(workspace.Shadows:GetChildren()) do
+                shadow:Destroy()
+            end
+            ShowNotification("All shadows destroyed!")
+        else
+            ShowNotification("No Shadows folder found.")
+        end
+    end,
+})
+
+-- ======= MAIN TAB =======
+local MainTab = Window:CreateTab("Main", 4483362458)
+
+MainTab:CreateSection("Auto Fishing")
+
+MainTab:CreateToggle({
+    Name = "Auto Cast",
+    CurrentValue = false,
+    Flag = "AutoCast",
+    Callback = function(Value)
+        autoCastEnabled = Value
+        if Value then
+            local RodName = ReplicatedStorage.playerstats[LocalPlayer.Name].Stats.rod.Value
+            if LocalPlayer.Backpack:FindFirstChild(RodName) then
+                LocalPlayer.Character.Humanoid:EquipTool(LocalPlayer.Backpack:FindFirstChild(RodName))
+            end
+            task.wait(0.5)
+            doCast()
+        end
+    end,
+})
+
+MainTab:CreateToggle({
+    Name = "Auto Shake",
+    CurrentValue = false,
+    Flag = "AutoShake",
+    Callback = function(Value)
+        autoShakeEnabled = Value
+        if Value then
+            startAutoShake()
+        else
+            stopAutoShake()
+        end
+    end,
+})
+
+MainTab:CreateToggle({
+    Name = "Auto Reel",
+    CurrentValue = false,
+    Flag = "AutoReel",
+    Callback = function(Value)
+        autoReelEnabled = Value
+        if Value then
+            startAutoReel()
+        else
+            stopAutoReel()
+        end
+    end,
+})
+
+MainTab:CreateToggle({
+    Name = "Freeze Character",
+    CurrentValue = false,
+    Flag = "FreezeChar",
+    Callback = function(Value)
+        local oldpos = HumanoidRootPart.CFrame
+        AutoFreeze = Value
+        if Value then
+            rememberPosition()
+        end
+    end,
+})
+
+MainTab:CreateSection("Fishing Modes")
+
+MainTab:CreateDropdown({
+    Name = "Cast Mode",
+    Options = {"Legit", "Blatant"},
+    CurrentOption = {"Legit"},
+    MultipleOptions = false,
+    Flag = "CastMode",
+    Callback = function(Option)
+        CastMode = Option
+    end,
+})
+
+MainTab:CreateDropdown({
+    Name = "Shake Mode",
+    Options = {"Navigation", "Mouse"},
+    CurrentOption = {"Navigation"},
+    MultipleOptions = false,
+    Flag = "ShakeMode",
+    Callback = function(Option)
+        ShakeMode = Option
+    end,
+})
+
+MainTab:CreateDropdown({
+    Name = "Reel Mode",
+    Options = {"Legit", "Blatant"},
+    CurrentOption = {"Blatant"},
+    MultipleOptions = false,
+    Flag = "ReelMode",
+    Callback = function(Option)
+        ReelMode = Option
+    end,
+})
+
+-- ======= ITEMS TAB =======
+local ItemsTab = Window:CreateTab("Items", 4483362458)
+
+ItemsTab:CreateSection("Sell Items")
+
+ItemsTab:CreateButton({
+    Name = "Sell Hand",
+    Info = "Sells items in hand",
+    Callback = function()
+        SellHand()
+    end,
+})
+
+ItemsTab:CreateButton({
+    Name = "Sell All",
+    Info = "Sells all items",
+    Callback = function()
+        SellAll()
+    end,
+})
+
+ItemsTab:CreateSection("Treasure")
+
+ItemsTab:CreateButton({
+    Name = "Teleport to Jack Marrow",
+    Info = "TP to the treasure NPC",
+    Callback = function()
+        HumanoidRootPart.CFrame = CFrame.new(-2824.359, 214.311, 1518.130)
+    end,
+})
+
+ItemsTab:CreateButton({
+    Name = "Repair Map",
+    Info = "Repairs your Treasure Map",
+    Callback = function()
+        for _, v in pairs(LocalPlayer.Backpack:GetChildren()) do
+            if v.Name == "Treasure Map" then
+                LocalPlayer.Character.Humanoid:EquipTool(v)
+                workspace.world.npcs["Jack Marrow"].treasure.repairmap:InvokeServer()
+                ShowNotification("Map repaired!")
+                return
+            end
+        end
+        ShowNotification("No Treasure Map found in backpack.")
+    end,
+})
+
+ItemsTab:CreateButton({
+    Name = "Collect Treasure",
+    Info = "Auto-collect all treasure chests",
+    Callback = function()
+        for _, v in ipairs(game:GetService("Workspace"):GetDescendants()) do
+            if v.ClassName == "ProximityPrompt" then
+                v.HoldDuration = 0
+            end
+        end
+        for _, v in pairs(workspace.world.chests:GetDescendants()) do
+            if v:IsA("Part") and v:FindFirstChild("ChestSetup") then
+                HumanoidRootPart.CFrame = v.CFrame
+                for _, p in pairs(workspace.world.chests:GetDescendants()) do
+                    if p.Name == "ProximityPrompt" then
+                        fireproximityprompt(p)
+                    end
+                end
+                task.wait(1)
+            end
+        end
+        ShowNotification("Treasure collection complete!")
+    end,
+})
+
+-- ======= TELEPORTS TAB =======
+local TeleportsTab = Window:CreateTab("Teleports", 4483362458)
+
+TeleportsTab:CreateSection("Area Teleports")
+
+if #teleportSpots > 0 then
+    TeleportsTab:CreateDropdown({
+        Name = "Area Teleport",
+        Options = teleportSpots,
+        CurrentOption = {teleportSpots[1]},
+        MultipleOptions = false,
+        Flag = "AreaTeleport",
+        Callback = function(Value)
+            xpcall(function()
+                local spot = TpSpotsFolder:FindFirstChild(Value)
+                if spot then
+                    HumanoidRootPart.CFrame = spot.CFrame + Vector3.new(0, 5, 0)
+                else
+                    ShowNotification("Teleport spot not found: " .. tostring(Value))
+                end
+            end, function(err)
+                ShowNotification("Teleport error: " .. tostring(err))
+            end)
+        end,
+    })
+end
+
+TeleportsTab:CreateSection("Totem Teleports")
+
+TeleportsTab:CreateDropdown({
+    Name = "Select Totem",
+    Options = {"Aurora", "Sundial", "Windset", "Smokescreen", "Tempest"},
+    CurrentOption = {"Aurora"},
+    MultipleOptions = false,
+    Flag = "TotemTP",
+    Callback = function(Value)
+        local positions = {
+            Aurora     = CFrame.new(-1811, -137, -3282),
+            Sundial    = CFrame.new(-1148, 135, -1075),
+            Windset    = CFrame.new(2849, 178, 2702),
+            Smokescreen= CFrame.new(2789, 140, -625),
+            Tempest    = CFrame.new(35, 133, 1943),
+        }
+        if positions[Value] then
+            HumanoidRootPart.CFrame = positions[Value]
+            ShowNotification("Teleported to " .. Value)
+        end
+    end,
+})
+
+TeleportsTab:CreateSection("World Events")
+
+TeleportsTab:CreateDropdown({
+    Name = "World Event Teleport",
+    Options = {"Strange Whirlpool", "Great Hammerhead Shark", "Great White Shark", "Whale Shark", "The Depths - Serpent"},
+    CurrentOption = {"Strange Whirlpool"},
+    MultipleOptions = false,
+    Flag = "WorldEventTP",
+    Callback = function(Value)
+        local eventMap = {
+            ["Strange Whirlpool"]      = {name = "Isonade",               offset = Vector3.new(25, 135, 25)},
+            ["Great Hammerhead Shark"] = {name = "Great Hammerhead Shark", offset = Vector3.new(0, 135, 0)},
+            ["Great White Shark"]      = {name = "Great White Shark",      offset = Vector3.new(0, 135, 0)},
+            ["Whale Shark"]            = {name = "Whale Shark",            offset = Vector3.new(0, 135, 0)},
+            ["The Depths - Serpent"]   = {name = "The Depths - Serpent",   offset = Vector3.new(0, 50, 0)},
+        }
+        local entry = eventMap[Value]
+        if not entry then return end
+        local WorldEvent = FishingZonesFolder:FindFirstChild(entry.name)
+        if not WorldEvent then
+            return ShowNotification("Not found: " .. Value)
+        end
+        HumanoidRootPart.CFrame = CFrame.new(WorldEvent.Position + entry.offset)
+        ShowNotification("Teleported to " .. Value)
+    end,
+})
+
+TeleportsTab:CreateSection("Special Teleports")
+
+TeleportsTab:CreateButton({
+    Name = "Teleport to Traveler Merchant",
+    Info = "Teleports to the Merchant Boat",
+    Callback = function()
+        local Merchant = workspace.active:FindFirstChild("Merchant Boat")
+        if not Merchant then return ShowNotification("Merchant Boat not found!") end
+        HumanoidRootPart.CFrame = CFrame.new(workspace.active["Merchant Boat"].Boat["Merchant Boat"].r.HandlesR.Position)
+        ShowNotification("Teleported to Traveler Merchant!")
+    end,
+})
+
+TeleportsTab:CreateButton({
+    Name = "Create Safe Zone",
+    Info = "Creates a floating platform to fish safely",
+    Callback = function()
+        local SafeZone = Instance.new("Part")
+        SafeZone.Size = Vector3.new(30, 1, 30)
+        SafeZone.Position = Vector3.new(math.random(-2000, 2000), math.random(50000, 90000), math.random(-2000, 2000))
+        SafeZone.Anchored = true
+        SafeZone.BrickColor = BrickColor.new("Bright purple")
+        SafeZone.Material = Enum.Material.ForceField
+        SafeZone.Parent = workspace
+        HumanoidRootPart.CFrame = SafeZone.CFrame + Vector3.new(0, 5, 0)
+        ShowNotification("Safe Zone created!")
+    end,
+})
+
+-- ======= MISC TAB =======
+local MiscTab = Window:CreateTab("Misc", 4483362458)
+
+MiscTab:CreateSection("Character")
+
+MiscTab:CreateToggle({
+    Name = "Walk On Water",
+    CurrentValue = false,
+    Flag = "WalkOnWater",
+    Callback = function(Value)
+        for _, v in pairs(workspace.zones.fishing:GetChildren()) do
+            if v.Name == WalkZone then
+                v.CanCollide = Value
+                if v.Name == "Ocean" then
+                    for _, d in pairs(workspace.zones.fishing:GetChildren()) do
+                        if d.Name == "Deep Ocean" then
+                            d.CanCollide = Value
+                        end
+                    end
+                end
+            end
+        end
+    end,
+})
+
+MiscTab:CreateDropdown({
+    Name = "Walk On Water Zone",
+    Options = {"Ocean", "Desolate Deep", "The Depths"},
+    CurrentOption = {"Ocean"},
+    MultipleOptions = false,
+    Flag = "WalkOnWaterZone",
+    Callback = function(Value)
+        WalkZone = Value
+    end,
+})
+
+MiscTab:CreateSlider({
+    Name = "Walk Speed",
+    Range = {16, 200},
+    Increment = 1,
+    Suffix = "",
+    CurrentValue = 16,
+    Flag = "WalkSpeed",
+    Callback = function(Value)
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.WalkSpeed = Value
+        end
+    end,
+})
+
+MiscTab:CreateSlider({
+    Name = "Jump Height",
+    Range = {50, 500},
+    Increment = 1,
+    Suffix = "",
+    CurrentValue = 50,
+    Flag = "JumpHeight",
+    Callback = function(Value)
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.JumpPower = Value
+        end
+    end,
+})
+
+MiscTab:CreateToggle({
+    Name = "Noclip",
+    CurrentValue = false,
+    Flag = "Noclip",
+    Callback = function(Value)
+        Noclip = Value
+    end,
+})
+
+MiscTab:CreateSection("Misc Toggles")
+
+MiscTab:CreateToggle({
+    Name = "Bypass Fish Radar",
+    CurrentValue = false,
+    Flag = "BypassRadar",
+    Callback = function(Value)
+        for _, v in pairs(CollectionService:GetTagged("radarTag")) do
+            if v:IsA("BillboardGui") or v:IsA("SurfaceGui") then
+                v.Enabled = Value
+            end
+        end
+    end,
+})
+
+MiscTab:CreateToggle({
+    Name = "Bypass GPS",
+    CurrentValue = false,
+    Flag = "BypassGPS",
+    Callback = function(Value)
+        if Value then
+            local XyzClone = ReplicatedStorage.resources.items.items.GPS.GPS.gpsMain.xyz:Clone()
+            XyzClone.Parent = PlayerGui:WaitForChild("hud"):WaitForChild("safezone"):WaitForChild("backpack")
+            local function updateXyz()
+                local Pos = GetPosition()
+                XyzClone.Text = string.format(
+                    "<font color='#ff4949'>X</font><font color='#a3ff81'>Y</font><font color='#626aff'>Z</font>: %s, %s, %s",
+                    ExportValue(Pos[1]), ExportValue(Pos[2]), ExportValue(Pos[3])
+                )
+            end
+            updateXyz()
+            BypassGpsLoop = RunService.Heartbeat:Connect(updateXyz)
+        else
+            local existing = PlayerGui.hud.safezone.backpack:FindFirstChild("xyz")
+            if existing then existing:Destroy() end
+            if BypassGpsLoop then
+                BypassGpsLoop:Disconnect()
+                BypassGpsLoop = nil
+            end
+        end
+    end,
+})
+
+MiscTab:CreateToggle({
+    Name = "Remove Fog",
+    CurrentValue = false,
+    Flag = "RemoveFog",
+    Callback = function(Value)
+        local lighting = game:GetService("Lighting")
+        if Value then
+            local sky = lighting:FindFirstChild("Sky")
+            if sky then sky.Parent = lighting:FindFirstChild("bloom") end
+        else
+            local sky = lighting:FindFirstChild("bloom") and lighting.bloom:FindFirstChild("Sky")
+            if sky then sky.Parent = lighting end
+        end
+    end,
+})
+
+MiscTab:CreateToggle({
+    Name = "Day Only",
+    CurrentValue = false,
+    Flag = "DayOnly",
+    Callback = function(Value)
+        if Value then
+            DayOnlyLoop = RunService.Heartbeat:Connect(function()
+                game:GetService("Lighting").TimeOfDay = "12:00:00"
+            end)
+        else
+            if DayOnlyLoop then
+                DayOnlyLoop:Disconnect()
+                DayOnlyLoop = nil
+            end
+        end
+    end,
+})
+
+MiscTab:CreateToggle({
+    Name = "Hold Duration 0s (ProximityPrompts)",
+    CurrentValue = false,
+    Flag = "HoldDuration",
+    Callback = function(Value)
+        if Value then
+            for _, v in ipairs(workspace:GetDescendants()) do
+                if v.ClassName == "ProximityPrompt" then
+                    v.HoldDuration = 0
+                end
+            end
+        end
+    end,
+})
+
+MiscTab:CreateToggle({
+    Name = "Disable Oxygen",
+    CurrentValue = true,
+    Flag = "DisableOxygen",
+    Callback = function(Value)
+        local client = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("client")
+        if client and client:FindFirstChild("oxygen") then
+            client.oxygen.Disabled = Value
+        end
+    end,
+})
+
+MiscTab:CreateToggle({
+    Name = "Show HUD",
+    CurrentValue = true,
+    Flag = "ShowHUD",
+    Callback = function(Value)
+        if PlayerGui:FindFirstChild("hud") and PlayerGui.hud:FindFirstChild("safezone") then
+            PlayerGui.hud.safezone.Visible = Value
+        end
+    end,
+})
+
+MiscTab:CreateToggle({
+    Name = "Protect Identity",
+    CurrentValue = false,
+    Flag = "IdentityHider",
+    Callback = function(Value)
+        spawn(function()
+            while Value and Rayfield.Flags["IdentityHider"].CurrentValue do
+                if UserPlayer:FindFirstChild("streak") then UserPlayer.streak.Text = "HIDDEN" end
+                if UserPlayer:FindFirstChild("level") then UserPlayer.level.Text = "Level: HIDDEN" end
+                if UserPlayer:FindFirstChild("user") then UserPlayer.user.Text = "HIDDEN" end
+                local hud = PlayerGui:FindFirstChild("hud") and PlayerGui.hud:FindFirstChild("safezone")
+                if hud then
+                    if hud:FindFirstChild("coins") then hud.coins.Text = "HIDDEN$" end
+                    if hud:FindFirstChild("lvl") then hud.lvl.Text = "HIDDEN LVL" end
+                end
+                task.wait(0.01)
+            end
+        end)
+    end,
+})
+
+MiscTab:CreateSection("Utility")
+
+MiscTab:CreateButton({
+    Name = "Copy XYZ to Clipboard",
+    Info = "Copies teleport CFrame command",
+    Callback = function()
+        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local XYZ = tostring(hrp.Position)
+            setclipboard("game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(" .. XYZ .. ")")
+            ShowNotification("XYZ copied to clipboard!")
+        end
+    end,
+})
+
+MiscTab:CreateSection("Load Scripts")
+
+MiscTab:CreateButton({
+    Name = "Load Infinite-Yield FE",
+    Info = "Loads the Infinite Yield admin script",
+    Callback = function()
+        loadstring(game:HttpGet('https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source'))()
+    end,
+})
+
+MiscTab:CreateButton({
+    Name = "Load RemoteSpy",
+    Info = "Loads the RemoteSpy tool",
+    Callback = function()
+        loadstring(game:HttpGetAsync("https://github.com/richie0866/remote-spy/releases/latest/download/RemoteSpy.lua"))()
+    end,
+})
+
+-- ======= TRADE TAB =======
+local TradeTab = Window:CreateTab("Trade", 4483362458)
+
+TradeTab:CreateSection("Coming Soon")
+
+TradeTab:CreateParagraph({
+    Title = "Trade Features",
+    Content = "Trade features are coming soon! Stay tuned in our discord: discord.gg/25ms"
+})
+
+-- ======= INIT NOTIFICATION =======
+Rayfield:Notify({
+    Title = "CupPink Hub",
+    Content = "Successfully Executed! Welcome.",
+    Duration = 8,
+    Image = 4483362458,
+})
