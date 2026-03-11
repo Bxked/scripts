@@ -1,0 +1,408 @@
+-- // Rayfield GUI Hub
+-- // Features: Fly, Jump Hack, Speed, Player Teleport, Player Fling
+-- // Load Rayfield UI Library
+
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "Nexus Hub",
+    Icon = 0,
+    LoadingTitle = "Nexus Hub",
+    LoadingSubtitle = "by User",
+    Theme = "Default",
+    DisableRayfieldPrompts = false,
+    DisableBuildWarnings = false,
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "NexusHub",
+        FileName = "Config"
+    },
+    Discord = {
+        Enabled = false,
+    },
+    KeySystem = false,
+})
+
+-- // Services
+local Players       = game:GetService("Players")
+local RunService    = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService  = game:GetService("TweenService")
+
+local LocalPlayer   = Players.LocalPlayer
+local Character     = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local RootPart      = Character:WaitForChild("HumanoidRootPart")
+local Humanoid      = Character:WaitForChild("Humanoid")
+
+-- // Auto update character on respawn
+LocalPlayer.CharacterAdded:Connect(function(char)
+    Character = char
+    RootPart   = char:WaitForChild("HumanoidRootPart")
+    Humanoid   = char:WaitForChild("Humanoid")
+end)
+
+-- =====================================================
+-- //             MOVEMENT TAB
+-- =====================================================
+local MovementTab = Window:CreateTab("Movement", 4483362458)
+
+-- ---- FLY ----
+local flyEnabled   = false
+local flySpeed     = 50
+local flyBodyVel   = nil
+local flyBodyGyro  = nil
+local flyConn      = nil
+
+local function enableFly()
+    if flyEnabled then return end
+    flyEnabled = true
+
+    local char = LocalPlayer.Character
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    flyBodyVel = Instance.new("BodyVelocity")
+    flyBodyVel.Velocity = Vector3.zero
+    flyBodyVel.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+    flyBodyVel.Parent = root
+
+    flyBodyGyro = Instance.new("BodyGyro")
+    flyBodyGyro.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+    flyBodyGyro.P = 1e4
+    flyBodyGyro.Parent = root
+
+    flyConn = RunService.Heartbeat:Connect(function()
+        local char2 = LocalPlayer.Character
+        if not char2 then return end
+        local root2 = char2:FindFirstChild("HumanoidRootPart")
+        if not root2 then return end
+
+        local cam = workspace.CurrentCamera
+        local moveDir = Vector3.zero
+        local cf = cam.CFrame
+
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + cf.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - cf.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - cf.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + cf.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveDir = moveDir + Vector3.new(0,1,0) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then moveDir = moveDir - Vector3.new(0,1,0) end
+
+        if moveDir.Magnitude > 0 then
+            flyBodyVel.Velocity = moveDir.Unit * flySpeed
+        else
+            flyBodyVel.Velocity = Vector3.zero
+        end
+
+        flyBodyGyro.CFrame = cf
+    end)
+end
+
+local function disableFly()
+    if not flyEnabled then return end
+    flyEnabled = false
+    if flyConn then flyConn:Disconnect() flyConn = nil end
+    if flyBodyVel then flyBodyVel:Destroy() flyBodyVel = nil end
+    if flyBodyGyro then flyBodyGyro:Destroy() flyBodyGyro = nil end
+end
+
+MovementTab:CreateToggle({
+    Name = "Fly",
+    CurrentValue = false,
+    Flag = "FlyToggle",
+    Callback = function(val)
+        if val then enableFly() else disableFly() end
+    end,
+})
+
+MovementTab:CreateSlider({
+    Name = "Fly Speed",
+    Range = {10, 300},
+    Increment = 5,
+    Suffix = "studs/s",
+    CurrentValue = 50,
+    Flag = "FlySpeed",
+    Callback = function(val)
+        flySpeed = val
+    end,
+})
+
+MovementTab:CreateDivider()
+
+-- ---- SPEED ----
+local speedEnabled = false
+local defaultWalkSpeed = 16
+local walkSpeedValue   = 50
+
+MovementTab:CreateToggle({
+    Name = "Speed Hack",
+    CurrentValue = false,
+    Flag = "SpeedToggle",
+    Callback = function(val)
+        speedEnabled = val
+        local char = LocalPlayer.Character
+        if not char then return end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hum then return end
+        if val then
+            hum.WalkSpeed = walkSpeedValue
+        else
+            hum.WalkSpeed = defaultWalkSpeed
+        end
+    end,
+})
+
+MovementTab:CreateSlider({
+    Name = "Walk Speed",
+    Range = {16, 500},
+    Increment = 1,
+    Suffix = "studs/s",
+    CurrentValue = 50,
+    Flag = "WalkSpeed",
+    Callback = function(val)
+        walkSpeedValue = val
+        if speedEnabled then
+            local char = LocalPlayer.Character
+            if char then
+                local hum = char:FindFirstChildOfClass("Humanoid")
+                if hum then hum.WalkSpeed = val end
+            end
+        end
+    end,
+})
+
+MovementTab:CreateDivider()
+
+-- ---- JUMP HACK ----
+local jumpEnabled   = false
+local jumpPowerVal  = 100
+
+MovementTab:CreateToggle({
+    Name = "Jump Hack",
+    CurrentValue = false,
+    Flag = "JumpToggle",
+    Callback = function(val)
+        jumpEnabled = val
+        local char = LocalPlayer.Character
+        if not char then return end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hum then return end
+        if val then
+            hum.JumpPower = jumpPowerVal
+        else
+            hum.JumpPower = 50
+        end
+    end,
+})
+
+MovementTab:CreateSlider({
+    Name = "Jump Power",
+    Range = {50, 500},
+    Increment = 5,
+    Suffix = "power",
+    CurrentValue = 100,
+    Flag = "JumpPower",
+    Callback = function(val)
+        jumpPowerVal = val
+        if jumpEnabled then
+            local char = LocalPlayer.Character
+            if char then
+                local hum = char:FindFirstChildOfClass("Humanoid")
+                if hum then hum.JumpPower = val end
+            end
+        end
+    end,
+})
+
+-- =====================================================
+-- //             PLAYERS TAB
+-- =====================================================
+local PlayersTab = Window:CreateTab("Players", 4483362458)
+
+-- helper to get player list (excluding local)
+local function getPlayerNames()
+    local names = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            table.insert(names, p.Name)
+        end
+    end
+    if #names == 0 then names = {"No players found"} end
+    return names
+end
+
+-- ---- TELEPORT TO PLAYER ----
+local selectedTpPlayer = nil
+
+PlayersTab:CreateSection("Teleport to Player")
+
+local tpDropdown = PlayersTab:CreateDropdown({
+    Name = "Select Player",
+    Options = getPlayerNames(),
+    CurrentOption = {"Select..."},
+    Flag = "TpPlayerDropdown",
+    Callback = function(selected)
+        selectedTpPlayer = selected[1]
+    end,
+})
+
+PlayersTab:CreateButton({
+    Name = "Refresh Player List",
+    Callback = function()
+        local names = getPlayerNames()
+        tpDropdown:Refresh(names, true)
+        Rayfield:Notify({Title="Refreshed", Content="Player list updated.", Duration=2})
+    end,
+})
+
+PlayersTab:CreateButton({
+    Name = "Teleport",
+    Callback = function()
+        if not selectedTpPlayer or selectedTpPlayer == "Select..." or selectedTpPlayer == "No players found" then
+            Rayfield:Notify({Title="Error", Content="Select a valid player first.", Duration=3})
+            return
+        end
+        local target = Players:FindFirstChild(selectedTpPlayer)
+        if not target or not target.Character then
+            Rayfield:Notify({Title="Error", Content="Player not found or has no character.", Duration=3})
+            return
+        end
+        local myChar = LocalPlayer.Character
+        if not myChar then return end
+        local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+        local theirRoot = target.Character:FindFirstChild("HumanoidRootPart")
+        if myRoot and theirRoot then
+            myRoot.CFrame = theirRoot.CFrame + Vector3.new(3, 0, 0)
+            Rayfield:Notify({Title="Teleported", Content="Teleported to " .. selectedTpPlayer, Duration=2})
+        end
+    end,
+})
+
+PlayersTab:CreateDivider()
+
+-- ---- FLING PLAYER ----
+local selectedFlingPlayer = nil
+local flingPowerVal = 200
+
+PlayersTab:CreateSection("Fling Player")
+
+local flingDropdown = PlayersTab:CreateDropdown({
+    Name = "Select Player",
+    Options = getPlayerNames(),
+    CurrentOption = {"Select..."},
+    Flag = "FlingPlayerDropdown",
+    Callback = function(selected)
+        selectedFlingPlayer = selected[1]
+    end,
+})
+
+PlayersTab:CreateSlider({
+    Name = "Fling Power",
+    Range = {100, 5000},
+    Increment = 100,
+    Suffix = "force",
+    CurrentValue = 200,
+    Flag = "FlingPower",
+    Callback = function(val)
+        flingPowerVal = val
+    end,
+})
+
+PlayersTab:CreateButton({
+    Name = "Refresh Player List",
+    Callback = function()
+        local names = getPlayerNames()
+        flingDropdown:Refresh(names, true)
+        Rayfield:Notify({Title="Refreshed", Content="Player list updated.", Duration=2})
+    end,
+})
+
+PlayersTab:CreateButton({
+    Name = "Fling!",
+    Callback = function()
+        if not selectedFlingPlayer or selectedFlingPlayer == "Select..." or selectedFlingPlayer == "No players found" then
+            Rayfield:Notify({Title="Error", Content="Select a valid player first.", Duration=3})
+            return
+        end
+
+        local target = Players:FindFirstChild(selectedFlingPlayer)
+        if not target or not target.Character then
+            Rayfield:Notify({Title="Error", Content="Target has no character.", Duration=3})
+            return
+        end
+
+        local myChar = LocalPlayer.Character
+        if not myChar then return end
+        local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+        local targetRoot = target.Character:FindFirstChild("HumanoidRootPart")
+
+        if not myRoot or not targetRoot then return end
+
+        -- Teleport to target, apply velocity, then teleport back
+        local myOriginalCF = myRoot.CFrame
+        myRoot.CFrame = targetRoot.CFrame
+
+        local bv = Instance.new("BodyVelocity")
+        bv.Velocity = Vector3.new(
+            math.random(-flingPowerVal, flingPowerVal),
+            flingPowerVal,
+            math.random(-flingPowerVal, flingPowerVal)
+        )
+        bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+        bv.Parent = myRoot
+
+        task.delay(0.1, function()
+            bv:Destroy()
+            myRoot.CFrame = myOriginalCF
+        end)
+
+        Rayfield:Notify({Title="Flung!", Content="Flung " .. selectedFlingPlayer, Duration=2})
+    end,
+})
+
+-- =====================================================
+-- //             SETTINGS TAB
+-- =====================================================
+local SettingsTab = Window:CreateTab("Settings", 4483362458)
+
+SettingsTab:CreateSection("Reset")
+
+SettingsTab:CreateButton({
+    Name = "Reset Character",
+    Callback = function()
+        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum.Health = 0
+            Rayfield:Notify({Title="Reset", Content="Character reset.", Duration=2})
+        end
+    end,
+})
+
+SettingsTab:CreateButton({
+    Name = "Reset All Settings",
+    Callback = function()
+        disableFly()
+        speedEnabled = false
+        jumpEnabled  = false
+        local char = LocalPlayer.Character
+        if char then
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hum then
+                hum.WalkSpeed = defaultWalkSpeed
+                hum.JumpPower = 50
+            end
+        end
+        Rayfield:Notify({Title="Reset", Content="All hacks disabled.", Duration=2})
+    end,
+})
+
+-- =====================================================
+-- // Init
+-- =====================================================
+Rayfield:LoadConfiguration()
+Rayfield:Notify({
+    Title = "Nexus Hub Loaded",
+    Content = "All features ready. Use the tabs above.",
+    Duration = 4,
+})
